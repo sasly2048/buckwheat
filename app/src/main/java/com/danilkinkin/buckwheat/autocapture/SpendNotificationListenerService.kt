@@ -9,6 +9,8 @@ import com.danilkinkin.buckwheat.data.entities.Transaction
 import com.danilkinkin.buckwheat.data.entities.TransactionType
 import com.danilkinkin.buckwheat.di.SettingsRepository
 import com.danilkinkin.buckwheat.di.SpendsRepository
+import com.danilkinkin.buckwheat.widget.extend.ExtendWidgetReceiver
+import com.danilkinkin.buckwheat.widget.minimal.MinimalWidgetReceiver
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,44 +54,56 @@ class SpendNotificationListenerService : NotificationListenerService() {
         sbn ?: return
         if (!enabled) return
         if (sbn.packageName !in monitoredPackages) return
-        val n = sbn.notification ?: return
-        if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
-        if (n.flags and Notification.FLAG_ONGOING_EVENT != 0) return
+        // Guard the whole handler: it runs on the system binder thread, so an
+        // unexpected throw must never propagate and kill the process.
+        try {
+            val n = sbn.notification ?: return
+            if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+            if (n.flags and Notification.FLAG_ONGOING_EVENT != 0) return
 
-        val extras = n.extras ?: return
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
-        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
-        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+            val extras = n.extras ?: return
+            val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+            val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+            val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
 
-        // Cheap keyword pre-filter before any regex work.
-        val probe = ((title ?: "") + " " + (bigText ?: text ?: "")).lowercase()
-        if (DEBIT_HINTS.none { probe.contains(it) }) return
+            // Cheap keyword pre-filter before any regex work.
+            val probe = ((title ?: "") + " " + (text ?: "") + " " + (bigText ?: "")).lowercase()
+            if (DEBIT_HINTS.none { probe.contains(it) }) return
 
-        val parsed = try {
-            PaymentNotificationParser.parse(sbn.packageName, title, text, bigText, sbn.postTime)
-        } catch (e: Exception) {
-            null
-        } ?: return
+            val parsed = PaymentNotificationParser
+                .parse(sbn.packageName, title, text, bigText, sbn.postTime) ?: return
 
-        if (dedup.isDuplicate(parsed)) return
-        dedup.remember(parsed) // synchronous: closes the race between near-simultaneous duplicates
-        val keys = dedup.keys(parsed)
+            if (dedup.isDuplicate(parsed)) return
+            dedup.remember(parsed) // synchronous: closes the race between near-simultaneous duplicates
+            val keys = dedup.keys(parsed)
 
-        serviceScope.launch {
-            try {
-                spendsRepository.addSpent(
-                    Transaction(
-                        type = TransactionType.SPENT,
-                        value = parsed.amount,
-                        date = Date(parsed.postTime),
-                        comment = parsed.merchant ?: "",
+            serviceScope.launch {
+                try {
+                    // Don't insert orphan spends before a budget exists.
+                    if (!spendsRepository.hasActiveBudget()) {
+                        dedup.forget(parsed)
+                        return@launch
+                    }
+                    spendsRepository.addSpent(
+                        Transaction(
+                            type = TransactionType.SPENT,
+                            value = parsed.amount,
+                            date = Date(parsed.postTime),
+                            comment = parsed.merchant ?: "",
+                        )
                     )
-                )
-                for (key in keys) autoCaptureDao.insert(AutoCaptureFingerprint(key, parsed.postTime))
-                autoCaptureDao.prune(System.currentTimeMillis() - WINDOW_MS)
-            } catch (e: Exception) {
-                // Never crash the listener on a bad notification.
+                    for (key in keys) autoCaptureDao.insert(AutoCaptureFingerprint(key, parsed.postTime))
+                    autoCaptureDao.prune(System.currentTimeMillis() - WINDOW_MS)
+                    // A spend added from the background won't hit the Activity-paused
+                    // widget refresh, so push the widget updates ourselves.
+                    ExtendWidgetReceiver.requestUpdateData(applicationContext)
+                    MinimalWidgetReceiver.requestUpdateData(applicationContext)
+                } catch (e: Exception) {
+                    // Never crash the listener on a bad notification.
+                }
             }
+        } catch (e: Exception) {
+            // swallow: hardening the binder-thread hot path
         }
     }
 

@@ -432,6 +432,19 @@ class SpendsRepository @Inject constructor(
         return nextDailyBudget
     }
 
+    /**
+     * True when a budget period is initialized, i.e. the datastore keys that
+     * [addSpent] relies on exist. Auto-capture uses this to avoid inserting
+     * orphan SPENT rows (and triggering a spurious error report) before the
+     * user has ever set a budget.
+     */
+    suspend fun hasActiveBudget(): Boolean {
+        val prefs = context.budgetDataStore.data.first()
+        return prefs[dailyBudgetStoreKey] != null &&
+                prefs[spentFromDailyBudgetStoreKey] != null &&
+                prefs[finishPeriodDateStoreKey] != null
+    }
+
     suspend fun addSpent(newTransaction: Transaction) {
         this.transactionDao.insert(newTransaction)
 
