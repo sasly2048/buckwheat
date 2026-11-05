@@ -54,6 +54,7 @@ fun Settings(onTriedWidget: () -> Unit = {}) {
             ) {
                 ThemeSwitcher()
                 LangSwitcher()
+                NotificationCaptureSwitcher()
                 TryWidget(onTried = {
                     onTriedWidget()
                 })

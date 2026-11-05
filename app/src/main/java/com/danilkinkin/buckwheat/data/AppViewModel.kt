@@ -97,6 +97,22 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    var autoCaptureEnabled = settingsRepository.isAutoCaptureEnabled().asLiveData()
+
+    var autoCapturePackages = settingsRepository.getAutoCapturePackages().asLiveData()
+
+    fun setAutoCaptureEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.switchAutoCapture(enabled)
+        }
+    }
+
+    fun setAutoCapturePackages(packages: Set<String>) {
+        viewModelScope.launch {
+            settingsRepository.setAutoCapturePackages(packages)
+        }
+    }
+
     fun openSheet(state: PathState) {
         sheetStates.value = sheetStates.value!!.plus(Pair(state.name, state))
     }

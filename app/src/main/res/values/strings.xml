@@ -143,4 +143,13 @@
   <string name="confirm_finish_budget_title">Finish budget</string>
   <string name="confirm_finish_budget_description">Your current budget will be completed, and you will no longer be able to make any further expenses</string>
   <string name="confirm_finish_budget">Finish budget</string>
+    <!-- Notification auto-capture -->
+    <string name="auto_capture_label">Auto-capture spends</string>
+    <string name="auto_capture_description">Read payment app notifications and log debits automatically</string>
+    <string name="auto_capture_access_label">Notification access</string>
+    <string name="auto_capture_access_granted">Granted</string>
+    <string name="auto_capture_access_denied">Not granted</string>
+    <string name="auto_capture_apps_label">Monitored apps</string>
+    <string name="auto_capture_apps_save">Save</string>
+    <string name="auto_capture_service_label">Buckwheat spend capture</string>
 </resources>
