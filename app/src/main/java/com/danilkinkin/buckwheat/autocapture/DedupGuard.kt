@@ -4,18 +4,22 @@ import java.math.RoundingMode
 
 /**
  * Bounded, in-memory duplicate guard. Collapses the same real payment reported
- * by several apps into one entry. Each payment yields up to two keys: a
- * reference key (R:<refId>) when the notification carries a bank/UPI ref, and
- * always an amount+merchant key (H:<paise>|<merchantKey>). A payment is a
- * duplicate if ANY of its keys was seen within [windowMs]; remembering a payment
- * records ALL of its keys. This closes the case where one app reports a ref and
- * another reports the same payment without one.
+ * by several apps into one entry. Each payment yields up to two keys:
+ *  - R:<refId> when the notification carries a bank/UPI reference, matched
+ *    within [windowMs] (long) — the authoritative cross-app key;
+ *  - H:<paise>|<merchantKey> always, matched within [hashWindowMs] (short) —
+ *    a fallback for apps that omit a ref.
  *
- * Backed by an access-order LRU capped at [capacity] so memory stays tiny.
- * No Android dependencies; [clock] is injectable. Thread-safe.
+ * The short hash window lets cross-app duplicates (which arrive within seconds)
+ * collapse, while NOT dropping a genuinely distinct repeat purchase of the same
+ * amount+merchant made minutes later that carries its own distinct ref.
+ *
+ * Backed by an access-order LRU capped at [capacity]. No Android dependencies;
+ * [clock] is injectable. Thread-safe.
  */
 class DedupGuard(
     private val windowMs: Long = 600_000L,
+    private val hashWindowMs: Long = 90_000L,
     private val capacity: Int = 64,
     private val clock: () -> Long,
 ) {
@@ -24,7 +28,7 @@ class DedupGuard(
             size > capacity
     }
 
-    /** All dedup keys for a payment, most specific first. */
+    /** All dedup keys for a payment, ref key (if any) first. */
     fun keys(p: ParsedPayment): List<String> {
         val paise = p.amount.movePointRight(2).setScale(0, RoundingMode.HALF_EVEN).toBigInteger()
         val merchantKey = p.merchant?.lowercase()?.replace(Regex("[^a-z0-9]"), "")?.ifBlank { "?" } ?: "?"
@@ -33,16 +37,24 @@ class DedupGuard(
         return if (!ref.isNullOrBlank()) listOf("R:$ref", hash) else listOf(hash)
     }
 
+    private fun windowFor(key: String): Long = if (key.startsWith("R:")) windowMs else hashWindowMs
+
     @Synchronized
     fun isDuplicate(p: ParsedPayment): Boolean {
         val now = clock()
-        return keys(p).any { k -> seen[k]?.let { now - it <= windowMs } == true }
+        return keys(p).any { k -> seen[k]?.let { now - it <= windowFor(k) } == true }
     }
 
     @Synchronized
     fun remember(p: ParsedPayment) {
         val now = clock()
         for (k in keys(p)) seen[k] = now
+    }
+
+    /** Undo a [remember] — used when the capture is abandoned (e.g. no active budget). */
+    @Synchronized
+    fun forget(p: ParsedPayment) {
+        for (k in keys(p)) seen.remove(k)
     }
 
     @Synchronized
