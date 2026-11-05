@@ -4,8 +4,10 @@ import androidx.room.*
 import androidx.room.migration.AutoMigrationSpec
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.danilkinkin.buckwheat.data.dao.AutoCaptureDao
 import com.danilkinkin.buckwheat.data.dao.StorageDao
 import com.danilkinkin.buckwheat.data.dao.TransactionDao
+import com.danilkinkin.buckwheat.data.entities.AutoCaptureFingerprint
 import com.danilkinkin.buckwheat.data.entities.Storage
 import com.danilkinkin.buckwheat.data.entities.Transaction
 
@@ -47,9 +49,21 @@ val AutoMigration4to5: Migration = object : Migration(4, 5) {
     }
 }
 
+// Add auto_capture_fingerprints table (additive; preserves existing data)
+val AutoMigration5to6: Migration = object : Migration(5, 6) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL(
+            "CREATE TABLE IF NOT EXISTS `auto_capture_fingerprints` " +
+                    "(`fingerprint` TEXT NOT NULL, " +
+                    "`postTime` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`fingerprint`))"
+        )
+    }
+}
+
 @Database(
-    entities = [Transaction::class, Storage::class],
-    version = 5,
+    entities = [Transaction::class, Storage::class, AutoCaptureFingerprint::class],
+    version = 6,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = AutoMigration1to2::class),
         AutoMigration(from = 2, to = 3, spec = AutoMigration2to3::class),
@@ -64,7 +78,9 @@ abstract class DatabaseModule : RoomDatabase() {
 
     abstract fun storageDao(): StorageDao
 
+    abstract fun autoCaptureDao(): AutoCaptureDao
+
     companion object {
-        val MANUAL_MIGRATIONS = arrayOf<Migration>(AutoMigration4to5)
+        val MANUAL_MIGRATIONS = arrayOf<Migration>(AutoMigration4to5, AutoMigration5to6)
     }
 }
