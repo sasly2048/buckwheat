@@ -13,33 +13,46 @@ class DedupGuardTest {
 
     @Test fun sameRefIdIsDuplicate() {
         val g = guard()
-        val fp = g.fingerprint(pay("10", "Swiggy", "RRN99"))
-        assertFalse(g.isDuplicate(fp)); g.remember(fp)
-        assertTrue(g.isDuplicate(g.fingerprint(pay("10", null, "RRN99")))) // other app, no merchant
+        val p = pay("10", "Swiggy", "RRN99")
+        assertFalse(g.isDuplicate(p)); g.remember(p)
+        assertTrue(g.isDuplicate(pay("10", null, "RRN99"))) // other app, no merchant
     }
 
     @Test fun fallbackHashCollapsesWhenNoRef() {
         val g = guard()
-        val fp = g.fingerprint(pay("250.00", "Swiggy", null)); g.remember(fp)
-        assertTrue(g.isDuplicate(g.fingerprint(pay("250.00", "swiggy", null))))
+        val p = pay("250.00", "Swiggy", null); g.remember(p)
+        assertTrue(g.isDuplicate(pay("250.00", "swiggy", null)))
+    }
+
+    @Test fun refThenNoRefStillDuplicate() {
+        val g = guard()
+        g.remember(pay("10", "Swiggy", "RRN1"))           // one app: has ref
+        assertTrue(g.isDuplicate(pay("10", "Swiggy", null))) // another app: no ref, same amount+merchant
+    }
+
+    @Test fun noRefThenRefStillDuplicate() {
+        val g = guard()
+        g.remember(pay("10", "Swiggy", null))             // one app: no ref
+        assertTrue(g.isDuplicate(pay("10", "Swiggy", "RRN1"))) // another app: has ref
     }
 
     @Test fun expiresAfterWindow() {
         val g = guard()
-        val fp = g.fingerprint(pay("10", "A", null)); g.remember(fp)
+        val p = pay("10", "A", null); g.remember(p)
         now += 600_001L
-        assertFalse(g.isDuplicate(fp))
+        assertFalse(g.isDuplicate(p))
     }
 
     @Test fun evictsBeyondCapacity() {
         val g = guard()
-        repeat(70) { g.remember(g.fingerprint(pay("$it", "m$it", null))) }
-        assertFalse(g.isDuplicate(g.fingerprint(pay("0", "m0", null)))) // oldest evicted
+        repeat(70) { g.remember(pay("$it", "m$it", null)) }
+        assertFalse(g.isDuplicate(pay("0", "m0", null))) // oldest evicted
     }
 
     @Test fun seedRestoresAfterRestart() {
         val g = guard()
-        val fp = g.fingerprint(pay("10", "A", "R1"))
-        g.seed(listOf(fp to now)); assertTrue(g.isDuplicate(fp))
+        val p = pay("10", "A", "R1")
+        g.seed(g.keys(p).map { it to now })
+        assertTrue(g.isDuplicate(p))
     }
 }

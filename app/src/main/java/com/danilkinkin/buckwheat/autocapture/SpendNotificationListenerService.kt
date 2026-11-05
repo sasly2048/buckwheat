@@ -71,9 +71,9 @@ class SpendNotificationListenerService : NotificationListenerService() {
             null
         } ?: return
 
-        val fp = dedup.fingerprint(parsed)
-        if (dedup.isDuplicate(fp)) return
-        dedup.remember(fp) // synchronous: closes the race between near-simultaneous duplicates
+        if (dedup.isDuplicate(parsed)) return
+        dedup.remember(parsed) // synchronous: closes the race between near-simultaneous duplicates
+        val keys = dedup.keys(parsed)
 
         serviceScope.launch {
             try {
@@ -85,7 +85,7 @@ class SpendNotificationListenerService : NotificationListenerService() {
                         comment = parsed.merchant ?: "",
                     )
                 )
-                autoCaptureDao.insert(AutoCaptureFingerprint(fp, parsed.postTime))
+                for (key in keys) autoCaptureDao.insert(AutoCaptureFingerprint(key, parsed.postTime))
                 autoCaptureDao.prune(System.currentTimeMillis() - WINDOW_MS)
             } catch (e: Exception) {
                 // Never crash the listener on a bad notification.
