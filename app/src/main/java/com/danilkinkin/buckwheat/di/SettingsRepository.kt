@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.danilkinkin.buckwheat.autocapture.DEFAULT_PAYMENT_PACKAGES
 import com.danilkinkin.buckwheat.settingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.map
@@ -12,6 +13,8 @@ import javax.inject.Inject
 
 val debugStoreKey = booleanPreferencesKey("debug")
 val showSpentCardByDefaultStoreKey = booleanPreferencesKey("showSpentCardByDefault")
+val autoCaptureEnabledStoreKey = booleanPreferencesKey("autoCaptureEnabled")
+val autoCapturePackagesStoreKey = stringPreferencesKey("autoCapturePackages")
 
 enum class TUTORIAL_STAGE {
     NONE,
@@ -47,6 +50,28 @@ class SettingsRepository @Inject constructor(
     suspend fun switchShowSpentCardByDefault(isShow: Boolean) {
         context.settingsDataStore.edit {
             it[showSpentCardByDefaultStoreKey] = isShow
+        }
+    }
+
+    fun isAutoCaptureEnabled() = context.settingsDataStore.data.map {
+        it[autoCaptureEnabledStoreKey] ?: false
+    }
+
+    fun getAutoCapturePackages() = context.settingsDataStore.data.map {
+        val raw = it[autoCapturePackagesStoreKey]
+        if (raw.isNullOrBlank()) DEFAULT_PAYMENT_PACKAGES
+        else raw.split(",").map { s -> s.trim() }.filter { s -> s.isNotEmpty() }.toSet()
+    }
+
+    suspend fun switchAutoCapture(enabled: Boolean) {
+        context.settingsDataStore.edit {
+            it[autoCaptureEnabledStoreKey] = enabled
+        }
+    }
+
+    suspend fun setAutoCapturePackages(pkgs: Set<String>) {
+        context.settingsDataStore.edit {
+            it[autoCapturePackagesStoreKey] = pkgs.joinToString(",")
         }
     }
 
