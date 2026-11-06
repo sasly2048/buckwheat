@@ -3,6 +3,8 @@
 [![Latest release][release-badge]](https://github.com/danilkinkin/buckwheat/releases)
 [![Crowdin localization][localization-badge]](https://translate.buckwheat.app)
 
+> **Note:** This is a **fork** of the original [danilkinkin/buckwheat](https://github.com/danilkinkin/buckwheat). It adds an optional **notification-driven automatic spend capture** feature: a notification listener reads payment-app alerts (UPI apps, bank apps such as Kotak811, CRED, super.money, etc.) and logs confident debits as spends automatically, with cross-app deduplication. All credit for the original app goes to its author. See the original repository for upstream releases and documentation.
+
 [**Buckwheat**](https://buckwheat.app) is an app that helps you spend money wisely. 
 Writing down each spending sobers the mind and gives you an idea of how much and how you can spend.
 
